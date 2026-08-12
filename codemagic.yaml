@@ -7,11 +7,10 @@ workflows:
       java: 17
       android_sdk:
         build_tools: "34.0.0"
-      groups:
-        - android
     scripts:
       - name: Build APK
         script: |
+          chmod +x gradlew
           ./gradlew assembleDebug
     artifacts:
       - app/build/outputs/apk/debug/app-debug.apk
