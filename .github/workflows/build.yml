@@ -24,8 +24,13 @@ jobs:
     - name: Install CMake
       run: sudo apt-get update && sudo apt-get install -y cmake
 
-    - name: Make gradlew executable
-      run: chmod +x gradlew
+    # Generate gradle wrapper if missing
+    - name: Generate Gradle Wrapper
+      run: |
+        if [ ! -f gradlew ]; then
+          gradle wrapper
+        fi
+        chmod +x gradlew
 
     - name: Build APK
       run: ./gradlew assembleDebug --stacktrace
