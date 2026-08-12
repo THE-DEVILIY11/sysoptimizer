@@ -4,7 +4,6 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 30
     scripts:
-      # 1. Create root Gradle files if missing
       - name: Create root Gradle files
         script: |
           if [ ! -f build.gradle ]; then
@@ -52,12 +51,61 @@ workflows:
           EOF
           fi
 
-      # 2. Install Gradle via Homebrew (avoids wrapper download issues)
+      - name: Ensure app/ directory exists
+        script: |
+          mkdir -p app/src/main
+
+      - name: Create minimal app/build.gradle if missing
+        script: |
+          if [ ! -f app/build.gradle ]; then
+            cat > app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+          android {
+              namespace 'com.sysopt.booster'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.sysopt.booster"
+                  minSdk 26
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+          }
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.13.1'
+              implementation 'androidx.appcompat:appcompat:1.7.0'
+          }
+          EOF
+          fi
+
+      - name: Create minimal AndroidManifest.xml if missing
+        script: |
+          if [ ! -f app/src/main/AndroidManifest.xml ]; then
+            cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.sysopt.booster">
+              <application
+                  android:allowBackup="true"
+                  android:label="System Optimizer">
+                  <activity android:name=".MainActivity">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          fi
+
       - name: Install Gradle
         script: |
           brew install gradle
 
-      # 3. Build using system Gradle (no wrapper)
       - name: Build APK
         script: |
           gradle assembleDebug
