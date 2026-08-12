@@ -21,11 +21,14 @@ jobs:
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Grant execute permission for gradlew
+    - name: Install CMake
+      run: sudo apt-get update && sudo apt-get install -y cmake
+
+    - name: Make gradlew executable
       run: chmod +x gradlew
 
     - name: Build APK
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
