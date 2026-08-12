@@ -108,7 +108,7 @@ workflows:
 
       - name: Build APK
         script: |
-          gradle assembleDebug
+          gradle assembleDebug --warning-mode all
 
     artifacts:
       - app/build/outputs/apk/debug/app-debug.apk
