@@ -4,9 +4,9 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 30
     scripts:
+      # 1. Create root Gradle files if missing
       - name: Create root Gradle files
         script: |
-          # Create build.gradle at root if missing
           if [ ! -f build.gradle ]; then
             cat > build.gradle << 'EOF'
           buildscript {
@@ -32,7 +32,6 @@ workflows:
           EOF
           fi
 
-          # Create settings.gradle at root if missing
           if [ ! -f settings.gradle ]; then
             cat > settings.gradle << 'EOF'
           pluginManagement {
@@ -52,14 +51,16 @@ workflows:
           include ':app'
           EOF
           fi
-      - name: Generate Gradle wrapper
+
+      # 2. Install Gradle via Homebrew (avoids wrapper download issues)
+      - name: Install Gradle
         script: |
-          if [ ! -f gradlew ]; then
-            gradle wrapper
-          fi
-          chmod +x gradlew
+          brew install gradle
+
+      # 3. Build using system Gradle (no wrapper)
       - name: Build APK
         script: |
-          ./gradlew assembleDebug
+          gradle assembleDebug
+
     artifacts:
       - app/build/outputs/apk/debug/app-debug.apk
