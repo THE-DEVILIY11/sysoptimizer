@@ -4,10 +4,16 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 30
     scripts:
-      - name: Create root Gradle files
+      - name: Search for module() usage
         script: |
-          if [ ! -f build.gradle ]; then
-            cat > build.gradle << 'EOF'
+          echo "=== Searching for 'module(' in all .gradle files ==="
+          grep -rn "module(" . --include="*.gradle" || echo "No 'module(' found."
+          echo "=== Listing all .gradle files ==="
+          find . -name "*.gradle" -exec echo "--- {} ---" \; -exec cat {} \;
+      - name: Create clean Gradle files if needed
+        script: |
+          # Root build.gradle
+          cat > build.gradle << 'EOF'
           buildscript {
               ext.kotlin_version = '1.9.0'
               repositories {
@@ -15,7 +21,7 @@ workflows:
                   mavenCentral()
               }
               dependencies {
-                  classpath 'com.android.tools.build:gradle:8.1.0'
+                  classpath 'com.android.tools.build:gradle:8.5.0'
                   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
               }
           }
@@ -29,10 +35,9 @@ workflows:
               delete rootProject.buildDir
           }
           EOF
-          fi
 
-          if [ ! -f settings.gradle ]; then
-            cat > settings.gradle << 'EOF'
+          # settings.gradle
+          cat > settings.gradle << 'EOF'
           pluginManagement {
               repositories {
                   google()
@@ -49,16 +54,9 @@ workflows:
           rootProject.name = "sysoptimizer"
           include ':app'
           EOF
-          fi
 
-      - name: Ensure app/ directory exists
-        script: |
-          mkdir -p app/src/main
-
-      - name: Create minimal app/build.gradle if missing
-        script: |
-          if [ ! -f app/build.gradle ]; then
-            cat > app/build.gradle << 'EOF'
+          # app/build.gradle
+          cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
               id 'org.jetbrains.kotlin.android'
@@ -71,44 +69,59 @@ workflows:
                   minSdk 26
                   targetSdk 34
                   versionCode 1
-                  versionName "1.0"
+                  versionName "2.0"
+                  externalNativeBuild {
+                      cmake {
+                          cppFlags "-O2 -fvisibility=hidden -DNDEBUG"
+                          abiFilters "armeabi-v7a", "arm64-v8a"
+                      }
+                  }
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled true
+                      shrinkResources true
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+                  debug {
+                      minifyEnabled true
+                      shrinkResources true
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                      debuggable false
+                  }
+              }
+              externalNativeBuild {
+                  cmake {
+                      path "src/main/cpp/CMakeLists.txt"
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = '17'
               }
           }
           dependencies {
               implementation 'androidx.core:core-ktx:1.13.1'
               implementation 'androidx.appcompat:appcompat:1.7.0'
+              implementation 'com.google.android.material:material:1.12.0'
+              implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+              implementation 'androidx.work:work-runtime-ktx:2.9.1'
+              implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+              implementation 'com.google.code.gson:gson:2.11.0'
+              implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+              implementation 'com.google.android.gms:play-services-location:21.3.0'
+              implementation 'androidx.biometric:biometric:1.1.0'
+              implementation 'androidx.media:media:1.7.0'
           }
           EOF
-          fi
-
-      - name: Create minimal AndroidManifest.xml if missing
-        script: |
-          if [ ! -f app/src/main/AndroidManifest.xml ]; then
-            cat > app/src/main/AndroidManifest.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.sysopt.booster">
-              <application
-                  android:allowBackup="true"
-                  android:label="System Optimizer">
-                  <activity android:name=".MainActivity">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
-          fi
-
       - name: Install Gradle
         script: |
           brew install gradle
-
-      - name: Build APK
+      - name: Build APK with stacktrace
         script: |
-          gradle assembleDebug --warning-mode all
-
+          gradle assembleDebug --stacktrace
     artifacts:
       - app/build/outputs/apk/debug/app-debug.apk
