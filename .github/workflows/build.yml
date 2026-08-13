@@ -24,10 +24,30 @@ jobs:
       - name: Install CMake
         run: sudo apt-get update && sudo apt-get install -y cmake
 
-      - name: Create root Gradle files if missing
+      - name: Force Gradle 8.2 wrapper
         run: |
-          if [ ! -f build.gradle ]; then
-            cat > build.gradle << 'EOF'
+          # Create minimal wrapper with Gradle 8.2
+          mkdir -p gradle/wrapper
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+
+          # Create gradlew script
+          cat > gradlew << 'EOF'
+          #!/bin/sh
+          exec gradle "$@"
+          EOF
+          chmod +x gradlew
+
+      - name: Create clean Gradle files
+        run: |
+          mkdir -p app/src/main
+
+          cat > build.gradle << 'EOF'
           buildscript {
               ext.kotlin_version = '1.9.0'
               repositories {
@@ -49,10 +69,8 @@ jobs:
               delete rootProject.buildDir
           }
           EOF
-          fi
 
-          if [ ! -f settings.gradle ]; then
-            cat > settings.gradle << 'EOF'
+          cat > settings.gradle << 'EOF'
           pluginManagement {
               repositories {
                   google()
@@ -69,13 +87,8 @@ jobs:
           rootProject.name = "sysoptimizer"
           include ':app'
           EOF
-          fi
 
-      - name: Create app/build.gradle if missing
-        run: |
-          mkdir -p app/src/main
-          if [ ! -f app/build.gradle ]; then
-            cat > app/build.gradle << 'EOF'
+          cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
               id 'org.jetbrains.kotlin.android'
@@ -96,14 +109,6 @@ jobs:
               implementation 'androidx.appcompat:appcompat:1.7.0'
           }
           EOF
-          fi
-
-      - name: Generate Gradle Wrapper
-        run: |
-          if [ ! -f gradlew ]; then
-            gradle wrapper
-          fi
-          chmod +x gradlew
 
       - name: Build APK
         run: ./gradlew assembleDebug
